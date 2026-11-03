@@ -1,0 +1,42 @@
+name: deploy
+on:
+  workflow_dispatch:
+  push: { branches: [main], paths: ["terraform/**", "orchestration/**", "accelerator/**", "dataform/**"] }
+
+permissions: { contents: read, id-token: write }
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    environment: production        # add required reviewers => manual approval before apply
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=gma"
+      - run: terraform -chdir=terraform plan -var project_id=$PROJECT_ID -out=tfplan
+      - run: terraform -chdir=terraform apply -auto-approve tfplan
+
+  sync-code:
+    needs: terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: |
+          python setup.py sdist -d dist
+          gsutil cp dist/*.tar.gz gs://${PROJECT_ID}-gma-code/
+          gsutil -m cp -r ingestion/beam_batch ingestion/beam_streaming gs://${PROJECT_ID}-gma-code/
+          if [ -n "${{ vars.COMPOSER_DAG_PREFIX }}" ]; then
+            gsutil -m cp -r orchestration/dags/* accelerator validation governance "${{ vars.COMPOSER_DAG_PREFIX }}/"
+          fi

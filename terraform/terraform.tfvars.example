@@ -1,0 +1,10 @@
+project_id      = "your-project-id"
+region          = "asia-south1"
+analyst_members = ["user:analyst@example.com"]
+privacy_members = ["user:you@example.com"]
+
+# Turn these on only for the recorded demo, then `terraform destroy -target=module.<name>`
+enable_datastream = false
+enable_alloydb    = false
+enable_composer   = false
+enable_dq_scans   = false

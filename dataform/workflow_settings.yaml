@@ -1,0 +1,6 @@
+# Replace defaultProject (or set it in the Dataform repository settings). Region must match the datasets.
+defaultProject: YOUR_PROJECT_ID
+defaultLocation: asia-south1
+defaultDataset: staging
+defaultAssertionDataset: quality
+dataformCoreVersion: 3.0.0

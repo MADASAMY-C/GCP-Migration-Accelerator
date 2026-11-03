@@ -1,0 +1,21 @@
+config {
+  type: "table",
+  schema: "ml",
+  description: "Churn training set. Features use orders up to the cutoff (max date - 90d); label = no order after cutoff. No leakage."
+}
+
+WITH bounds AS (
+  SELECT MAX(order_ts) AS max_ts, TIMESTAMP_SUB(MAX(order_ts), INTERVAL 90 DAY) AS cutoff FROM ${ref("fact_orders")}
+), feats AS (
+  SELECT f.customer_id,
+         DATE_DIFF(DATE(b.cutoff), DATE(MAX(IF(f.order_ts <= b.cutoff, f.order_ts, NULL))), DAY) AS recency_days,
+         COUNTIF(f.order_ts <= b.cutoff) AS frequency,
+         IFNULL(SUM(IF(f.order_ts <= b.cutoff, f.payment_value, 0)), 0) AS monetary,
+         IFNULL(AVG(IF(f.order_ts <= b.cutoff, f.payment_value, NULL)), 0) AS avg_order_value,
+         COUNTIF(f.order_ts <= b.cutoff AND f.order_status IN ('returned', 'canceled')) AS bad_orders,
+         COUNTIF(f.order_ts > b.cutoff) AS future_orders
+  FROM ${ref("fact_orders")} f CROSS JOIN bounds b GROUP BY f.customer_id
+)
+SELECT customer_id, recency_days, frequency, monetary, avg_order_value, bad_orders,
+       IF(future_orders = 0, 1, 0) AS churned
+FROM feats WHERE frequency > 0

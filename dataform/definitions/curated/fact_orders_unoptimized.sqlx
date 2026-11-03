@@ -1,0 +1,7 @@
+config {
+  type: "table",
+  schema: "curated",
+  description: "BASELINE for the benchmark: identical rows to fact_orders but NOT partitioned or clustered."
+}
+
+SELECT * FROM ${ref("fact_orders")}

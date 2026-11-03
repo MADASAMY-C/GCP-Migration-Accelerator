@@ -1,0 +1,5 @@
+config { type: "table", schema: "curated", description: "Hourly streaming event counts and amounts." }
+
+SELECT TIMESTAMP_TRUNC(event_ts, HOUR) AS event_hour, event_type, COUNT(*) AS events, SUM(amount) AS amount
+FROM ${ref("stg_order_events")}
+GROUP BY 1, 2

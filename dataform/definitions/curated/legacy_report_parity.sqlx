@@ -1,0 +1,18 @@
+config {
+  type: "table",
+  schema: "curated",
+  description: "Daily revenue per the legacy warehouse vs the new platform. Shows where the old reports were wrong."
+}
+
+WITH new_side AS (
+  SELECT DATE(order_ts) AS order_date, COUNT(*) AS orders, SUM(payment_value) AS revenue
+  FROM ${ref("fact_orders")} GROUP BY 1
+), old_side AS (
+  SELECT order_date, COUNT(*) AS orders, SUM(amount) AS revenue
+  FROM ${ref("stg_legacy_orders")} GROUP BY 1
+)
+SELECT COALESCE(n.order_date, o.order_date) AS order_date,
+       n.orders AS orders_new, o.orders AS orders_legacy,
+       n.revenue AS revenue_new, o.revenue AS revenue_legacy,
+       ROUND(IFNULL(o.revenue, 0) - IFNULL(n.revenue, 0), 2) AS revenue_delta
+FROM new_side n FULL OUTER JOIN old_side o USING (order_date)

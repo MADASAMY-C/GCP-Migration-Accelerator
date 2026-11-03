@@ -1,0 +1,11 @@
+output "buckets" { value = module.storage.bucket_names }
+output "datasets" { value = module.bigquery.dataset_ids }
+output "pipeline_service_account" { value = module.iam.pipeline_sa_email }
+output "events_topic" { value = module.pubsub.topic_name }
+output "events_subscription" { value = module.pubsub.subscription_name }
+output "dead_letter_topic" { value = module.pubsub.dlq_topic_name }
+output "pii_taxonomy" { value = module.governance.taxonomy_name }
+output "analyst_sa" { value = module.governance.analyst_sa_email }
+output "privacy_sa" { value = module.governance.privacy_sa_email }
+output "composer_dag_bucket" { value = try(module.composer[0].dag_gcs_prefix, null) }
+output "alloydb_instance_ip" { value = try(module.alloydb[0].instance_ip, null) }

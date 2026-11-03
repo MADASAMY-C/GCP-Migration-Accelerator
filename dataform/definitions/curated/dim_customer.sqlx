@@ -1,0 +1,14 @@
+config {
+  type: "table",
+  schema: "curated",
+  description: "One row per real person. email/phone carry PII policy tags (applied by accelerator.policy_tags after each run).",
+  columns: {
+    email: "PII (pii_high): masked for analysts",
+    phone: "PII (pii_high): masked for analysts"
+  },
+  assertions: { uniqueKey: ["customer_id"], nonNull: ["customer_id"] }
+}
+
+SELECT customer_id, full_name, email, phone, city, state, created_at
+FROM ${ref("stg_customers")}
+WHERE customer_id = canonical_customer_id

@@ -1,0 +1,28 @@
+config {
+  type: "table",
+  schema: "curated",
+  description: "Customer 360 for the low-latency serving layer (AlloyDB) and the churn scorecard.",
+  assertions: { uniqueKey: ["customer_id"] }
+}
+
+WITH agg AS (
+  SELECT customer_id,
+         COUNT(*) AS lifetime_orders,
+         SUM(payment_value) AS lifetime_value,
+         MIN(order_ts) AS first_order_ts,
+         MAX(order_ts) AS last_order_ts,
+         COUNTIF(order_status = 'returned') AS returned_orders
+  FROM ${ref("fact_orders")} GROUP BY customer_id
+)
+SELECT c.customer_id, c.full_name, c.email, c.phone, c.city, c.state,
+       IFNULL(a.lifetime_orders, 0) AS lifetime_orders,
+       IFNULL(a.lifetime_value, 0) AS lifetime_value,
+       a.first_order_ts, a.last_order_ts, IFNULL(a.returned_orders, 0) AS returned_orders,
+       p.churn_probability, p.scored_at
+FROM ${ref("dim_customer")} c
+LEFT JOIN agg a USING (customer_id)
+LEFT JOIN (
+  SELECT customer_id, churn_probability, scored_at
+  FROM `${dataform.projectConfig.defaultDatabase}.ml.churn_predictions`
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY scored_at DESC) = 1
+) p USING (customer_id)

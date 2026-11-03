@@ -1,0 +1,12 @@
+config {
+  type: "table",
+  schema: "staging",
+  description: "Streaming events de-duplicated on event_id (Pub/Sub delivers at-least-once).",
+  bigquery: { partitionBy: "DATE(event_ts)", clusterBy: ["event_type"] },
+  assertions: { uniqueKey: ["event_id"] }
+}
+
+SELECT * EXCEPT (rn) FROM (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY ingest_ts) AS rn
+  FROM ${ref("stream_order_events")}
+) WHERE rn = 1

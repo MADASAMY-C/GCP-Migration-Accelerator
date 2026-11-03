@@ -1,0 +1,8 @@
+config {
+  type: "table",
+  schema: "staging",
+  assertions: { uniqueKey: ["payment_id"], rowConditions: ["payment_value >= 0"] }
+}
+
+SELECT payment_id, order_id, LOWER(payment_type) AS payment_type, payment_value
+FROM ${ref("public_payments")}

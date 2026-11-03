@@ -1,0 +1,7 @@
+taxonomy: pii_taxonomy
+location: asia-south1
+columns:
+  - { table: curated.dim_customer, column: email, tag: pii_high }
+  - { table: curated.dim_customer, column: phone, tag: pii_high }
+  - { table: curated.customer_360, column: email, tag: pii_high }
+  - { table: curated.customer_360, column: phone, tag: pii_high }

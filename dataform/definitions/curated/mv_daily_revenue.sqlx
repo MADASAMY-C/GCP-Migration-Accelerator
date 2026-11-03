@@ -1,0 +1,10 @@
+config {
+  type: "view",
+  materialized: true,
+  schema: "curated",
+  description: "Materialized view: daily revenue by order status (auto-refreshed, used by dashboards)."
+}
+
+SELECT DATE(order_ts) AS order_date, order_status, COUNT(*) AS orders, SUM(payment_value) AS revenue
+FROM ${ref("fact_orders")}
+GROUP BY order_date, order_status

@@ -1,0 +1,14 @@
+config {
+  type: "table",
+  schema: "ml",
+  description: "Current features for batch scoring (as of the latest order date)."
+}
+
+WITH bounds AS (SELECT MAX(order_ts) AS now_ts FROM ${ref("fact_orders")})
+SELECT f.customer_id,
+       DATE_DIFF(DATE(b.now_ts), DATE(MAX(f.order_ts)), DAY) AS recency_days,
+       COUNT(*) AS frequency,
+       IFNULL(SUM(f.payment_value), 0) AS monetary,
+       IFNULL(AVG(f.payment_value), 0) AS avg_order_value,
+       COUNTIF(f.order_status IN ('returned', 'canceled')) AS bad_orders
+FROM ${ref("fact_orders")} f CROSS JOIN bounds b GROUP BY f.customer_id

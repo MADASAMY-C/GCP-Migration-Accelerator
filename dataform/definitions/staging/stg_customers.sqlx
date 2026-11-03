@@ -1,0 +1,23 @@
+config {
+  type: "table",
+  schema: "staging",
+  description: "Typed customers with a canonical id: duplicate people (same email) collapse to the earliest customer_id.",
+  assertions: { uniqueKey: ["customer_id"], nonNull: ["customer_id", "full_name"] }
+}
+
+WITH cleaned AS (
+  SELECT
+    customer_id,
+    INITCAP(TRIM(full_name)) AS full_name,
+    NULLIF(LOWER(TRIM(email)), '') AS email,
+    phone,
+    city,
+    state,
+    created_at
+  FROM ${ref("public_customers")}
+)
+SELECT
+  *,
+  IF(email IS NULL, customer_id,
+     FIRST_VALUE(customer_id) OVER (PARTITION BY email ORDER BY created_at, customer_id)) AS canonical_customer_id
+FROM cleaned

@@ -1,0 +1,38 @@
+# Source (Postgres) vs target (BigQuery raw layer as migrated by Datastream).
+# Hash trick: first 15 hex chars of MD5 -> 60-bit int, XOR-aggregated. Identical on both engines.
+checks:
+  - name: customers_row_count
+    source_sql: "SELECT COUNT(*) FROM customers"
+    target_sql: "SELECT COUNT(*) FROM `${PROJECT_ID}.raw.public_customers`"
+  - name: orders_row_count
+    source_sql: "SELECT COUNT(*) FROM orders"
+    target_sql: "SELECT COUNT(*) FROM `${PROJECT_ID}.raw.public_orders`"
+  - name: order_items_row_count
+    source_sql: "SELECT COUNT(*) FROM order_items"
+    target_sql: "SELECT COUNT(*) FROM `${PROJECT_ID}.raw.public_order_items`"
+  - name: payments_row_count
+    source_sql: "SELECT COUNT(*) FROM payments"
+    target_sql: "SELECT COUNT(*) FROM `${PROJECT_ID}.raw.public_payments`"
+  - name: payments_total_value
+    source_sql: "SELECT SUM(payment_value) FROM payments"
+    target_sql: "SELECT SUM(payment_value) FROM `${PROJECT_ID}.raw.public_payments`"
+    tolerance_abs: 0.01
+  - name: orders_min_max_ts
+    source_sql: "SELECT EXTRACT(EPOCH FROM MIN(order_ts))::bigint + EXTRACT(EPOCH FROM MAX(order_ts))::bigint FROM orders"
+    target_sql: "SELECT UNIX_SECONDS(TIMESTAMP(MIN(order_ts))) + UNIX_SECONDS(TIMESTAMP(MAX(order_ts))) FROM `${PROJECT_ID}.raw.public_orders`"
+  - name: orders_row_checksum
+    source_sql: >
+      SELECT COALESCE(BIT_XOR(('x' || SUBSTR(MD5(order_id::text || '|' || customer_id::text || '|' || order_status), 1, 15))::bit(60)::bigint), 0)
+      FROM orders
+    target_sql: >
+      SELECT IFNULL(BIT_XOR(CAST(CONCAT('0x', SUBSTR(TO_HEX(MD5(CONCAT(CAST(order_id AS STRING), '|', CAST(customer_id AS STRING), '|', order_status))), 1, 15)) AS INT64)), 0)
+      FROM `${PROJECT_ID}.raw.public_orders`
+  - name: orders_per_month
+    mode: keyed
+    source_sql: "SELECT TO_CHAR(order_ts, 'YYYY-MM'), COUNT(*) FROM orders GROUP BY 1"
+    target_sql: "SELECT FORMAT_DATETIME('%Y-%m', order_ts), COUNT(*) FROM `${PROJECT_ID}.raw.public_orders` GROUP BY 1"
+  - name: revenue_per_month
+    mode: keyed
+    tolerance_abs: 0.01
+    source_sql: "SELECT TO_CHAR(o.order_ts, 'YYYY-MM'), SUM(p.payment_value) FROM orders o JOIN payments p USING (order_id) GROUP BY 1"
+    target_sql: "SELECT FORMAT_DATETIME('%Y-%m', o.order_ts), SUM(p.payment_value) FROM `${PROJECT_ID}.raw.public_orders` o JOIN `${PROJECT_ID}.raw.public_payments` p USING (order_id) GROUP BY 1"

@@ -1,0 +1,11 @@
+rules:
+  - { name: dim_customer_id_unique, table: curated.dim_customer, column: customer_id, type: unique, threshold: 1.0 }
+  - { name: dim_customer_id_not_null, table: curated.dim_customer, column: customer_id, type: not_null, threshold: 1.0 }
+  - { name: dim_customer_email_valid, table: curated.dim_customer, column: email, type: regex, pattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$', threshold: 0.99 }
+  - { name: dim_customer_email_complete, table: curated.dim_customer, column: email, type: not_null, threshold: 0.95 }
+  - { name: fact_orders_id_unique, table: curated.fact_orders, column: order_id, type: unique, threshold: 1.0 }
+  - { name: fact_orders_payment_range, table: curated.fact_orders, column: payment_value, type: range, min: 0, max: 10000000, threshold: 0.999 }
+  - { name: fact_orders_status_valid, table: curated.fact_orders, column: order_status, type: set, values: [delivered, shipped, processing, canceled, returned], threshold: 0.999 }
+  - { name: fact_orders_payment_complete, table: curated.fact_orders, column: payment_value, type: not_null, threshold: 0.999 }
+  - { name: fact_orders_value_consistent, table: curated.fact_orders, type: row_condition, expression: "ABS(items_value - payment_value) < 0.01", threshold: 0.999 }
+  - { name: legacy_parity_daily_revenue, table: curated.legacy_report_parity, type: row_condition, expression: "ABS(revenue_delta) < 1000", threshold: 0.95 }

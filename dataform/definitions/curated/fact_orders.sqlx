@@ -1,0 +1,28 @@
+config {
+  type: "table",
+  schema: "curated",
+  description: "Order grain fact, OPTIMIZED: partitioned by order date, clustered by customer/status.",
+  bigquery: {
+    partitionBy: "DATE(order_ts)",
+    clusterBy: ["customer_id", "order_status"],
+    requirePartitionFilter: false
+  },
+  assertions: {
+    uniqueKey: ["order_id"],
+    nonNull: ["order_id", "customer_id"],
+    rowConditions: ["payment_value >= 0"]
+  }
+}
+
+WITH items AS (
+  SELECT order_id, COUNT(*) AS item_count, SUM(quantity) AS units, SUM(line_value) AS items_value
+  FROM ${ref("stg_order_items")} GROUP BY order_id
+), pay AS (
+  SELECT order_id, SUM(payment_value) AS payment_value, ANY_VALUE(payment_type) AS payment_type
+  FROM ${ref("stg_payments")} GROUP BY order_id
+)
+SELECT o.order_id, o.customer_id, o.order_status, o.order_ts,
+       i.item_count, i.units, i.items_value, p.payment_value, p.payment_type
+FROM ${ref("stg_orders")} o
+LEFT JOIN items i USING (order_id)
+LEFT JOIN pay p USING (order_id)

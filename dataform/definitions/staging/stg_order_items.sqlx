@@ -1,0 +1,11 @@
+config {
+  type: "table",
+  schema: "staging",
+  assertions: {
+    uniqueKey: ["order_item_id"],
+    rowConditions: ["quantity > 0", "unit_price >= 0"]
+  }
+}
+
+SELECT order_item_id, order_id, product_id, quantity, unit_price, quantity * unit_price AS line_value
+FROM ${ref("public_order_items")}
