@@ -4,18 +4,10 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass
-from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from datetime import UTC, date, datetime
+from typing import Any
 
 import pandas as pd
-
-
-@dataclass
-class NormalizedData:
-    oltp: Dict[str, pd.DataFrame]
-    legacy: pd.DataFrame
-    manifest: Dict[str, Any]
 
 
 class DataUploadNormalizer:
@@ -35,7 +27,7 @@ class DataUploadNormalizer:
         return df
 
     @staticmethod
-    def _clean_amount(val: Any) -> Optional[float]:
+    def _clean_amount(val: Any) -> float | None:
         if val is None or (isinstance(val, float) and pd.isna(val)):
             return None
         s = str(val).strip()
@@ -75,24 +67,24 @@ class DataUploadNormalizer:
             try:
                 s_clean = s.split("T")[0].split(" ")[0]
                 return datetime.strptime(s_clean, fmt).date()
-            except Exception:
+            except ValueError:
                 continue
         try:
             return pd.to_datetime(s).date()
-        except Exception:
+        except (ValueError, TypeError):
             return None
 
     def normalize_oltp(
         self,
-        customers: Optional[pd.DataFrame] = None,
-        products: Optional[pd.DataFrame] = None,
-        orders: Optional[pd.DataFrame] = None,
-        order_items: Optional[pd.DataFrame] = None,
-        payments: Optional[pd.DataFrame] = None,
-        column_maps: Optional[Dict[str, Dict[str, str]]] = None,
-    ) -> Dict[str, pd.DataFrame]:
+        customers: pd.DataFrame | None = None,
+        products: pd.DataFrame | None = None,
+        orders: pd.DataFrame | None = None,
+        order_items: pd.DataFrame | None = None,
+        payments: pd.DataFrame | None = None,
+        column_maps: dict[str, dict[str, str]] | None = None,
+    ) -> dict[str, pd.DataFrame]:
         maps = column_maps or {}
-        out = {}
+        out: dict[str, pd.DataFrame] = {}
 
         if customers is not None and isinstance(customers, pd.DataFrame) and not customers.empty:
             df = customers.copy()
@@ -166,9 +158,12 @@ class DataUploadNormalizer:
 
         return out
 
-    def normalize_legacy_from_orders(self, orders: pd.DataFrame, customers: Optional[pd.DataFrame] = None, column_maps: Optional[Dict[str, Dict[str, str]]] = None) -> pd.DataFrame:
+    def normalize_legacy_from_orders(
+        self, orders: pd.DataFrame, customers: pd.DataFrame | None = None, column_maps: dict[str, dict[str, str]] | None = None
+    ) -> pd.DataFrame:
         if orders is None or not isinstance(orders, pd.DataFrame) or orders.empty:
-            raise ValueError("Orders data is required to generate legacy files")
+            msg = "Orders data is required to generate legacy files"
+            raise ValueError(msg)
         maps = column_maps or {}
         df = orders.copy()
         df = self._deduplicate_columns(df)
@@ -194,22 +189,26 @@ class DataUploadNormalizer:
                 c = self._deduplicate_columns(c)
                 try:
                     df = df.merge(c[["customer_id", "email"]].rename(columns={"email": "customer_email"}), on="customer_id", how="left")
-                except Exception:
+                except (KeyError, ValueError):
                     df["customer_email"] = None
             else:
                 df["customer_email"] = None
         df = self._deduplicate_columns(df)
-        legacy = pd.DataFrame({
-            "order_id": df.get("order_id"),
-            "customer_email": df.get("customer_email"),
-            "order_date": df["order_date"].apply(lambda x: x.strftime("%Y-%m-%d") if hasattr(x, "strftime") and x is not None else str(x) if x is not None else "2023-01-01"),
-            "status": df.get("status"),
-            "amount": df.get("amount").apply(self._clean_amount) if "amount" in df.columns else None,
-        })
+        legacy = pd.DataFrame(
+            {
+                "order_id": df.get("order_id"),
+                "customer_email": df.get("customer_email"),
+                "order_date": df["order_date"].apply(
+                    lambda x: x.strftime("%Y-%m-%d") if hasattr(x, "strftime") and x is not None else (str(x) if x is not None else "2023-01-01")
+                ),
+                "status": df.get("status"),
+                "amount": df.get("amount").apply(self._clean_amount) if "amount" in df.columns else None,
+            }
+        )
         return legacy
 
-    def write_oltp(self, oltp: Dict[str, pd.DataFrame]) -> List[str]:
-        written = []
+    def write_oltp(self, oltp: dict[str, pd.DataFrame]) -> list[str]:
+        written: list[str] = []
         if not oltp:
             return written
         for name, df in oltp.items():
@@ -221,8 +220,8 @@ class DataUploadNormalizer:
             written.append(path)
         return written
 
-    def write_legacy_partitioned(self, legacy: pd.DataFrame) -> List[str]:
-        written = []
+    def write_legacy_partitioned(self, legacy: pd.DataFrame) -> list[str]:
+        written: list[str] = []
         if legacy is None or not isinstance(legacy, pd.DataFrame) or legacy.empty:
             return written
         df = legacy.copy()
@@ -243,15 +242,15 @@ class DataUploadNormalizer:
             written.append(path)
         return written
 
-    def write_manifest(self, oltp: Dict[str, pd.DataFrame], legacy: pd.DataFrame) -> str:
+    def write_manifest(self, oltp: dict[str, pd.DataFrame], legacy: pd.DataFrame) -> str:
         manifest = {
             "source": "user_upload",
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-            "orders": int(len(legacy)) if legacy is not None and isinstance(legacy, pd.DataFrame) else int(len(oltp.get("orders", []))) if oltp and "orders" in oltp else 0,
-            "customers": int(len(oltp.get("customers", []))) if oltp and "customers" in oltp else None,
-            "products": int(len(oltp.get("products", []))) if oltp and "products" in oltp else None,
-            "order_items": int(len(oltp.get("order_items", []))) if oltp and "order_items" in oltp else None,
-            "payments": int(len(oltp.get("payments", []))) if oltp and "payments" in oltp else None,
+            "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "orders": len(legacy) if legacy is not None and isinstance(legacy, pd.DataFrame) else (len(oltp.get("orders", [])) if oltp and "orders" in oltp else 0),
+            "customers": len(oltp.get("customers", [])) if oltp and "customers" in oltp else None,
+            "products": len(oltp.get("products", [])) if oltp and "products" in oltp else None,
+            "order_items": len(oltp.get("order_items", [])) if oltp and "order_items" in oltp else None,
+            "payments": len(oltp.get("payments", [])) if oltp and "payments" in oltp else None,
         }
         path = os.path.join(self.out_dir, "manifest.json")
         with open(path, "w", encoding="utf-8") as fh:

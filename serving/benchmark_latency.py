@@ -1,35 +1,45 @@
 #!/usr/bin/env python3
-"""Compare p50/p95 latency: AlloyDB endpoint vs BigQuery endpoint. Usage: python serving/benchmark_latency.py --n 200"""
+from __future__ import annotations
+
 import argparse
-import json
-import random
 import statistics
-import urllib.request
+import time
+from urllib.error import HTTPError, URLError
+
+import requests
 
 
-def timed(url):
-    with urllib.request.urlopen(url, timeout=60) as r:
-        return json.load(r)["latency_ms"]
+def timed(url: str) -> float:
+    t0 = time.perf_counter()
+    r = requests.get(url, timeout=5)
+    r.raise_for_status()
+    return (time.perf_counter() - t0) * 1000.0
 
 
-def main():
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:8080")
-    ap.add_argument("--n", type=int, default=200)
-    ap.add_argument("--max-id", type=int, default=20000)
-    a = ap.parse_args()
-    ids = [random.randint(1, a.max_id) for _ in range(a.n)]
-    for label, prefix in (("alloydb", "customers"), ("bigquery", "bq/customers")):
-        ms = []
+    ap.add_argument("--runs", type=int, default=50)
+    ap.add_argument("--prefix", default="api/customer_360")
+    ap.add_argument("--ids", default="1,2,3,4,5")
+    args = ap.parse_args(argv)
+    ids = [x.strip() for x in args.ids.split(",") if x.strip()]
+    ms = []
+    for _ in range(args.runs):
         for i in ids:
             try:
-                ms.append(timed(f"{a.base}/{prefix}/{i}"))
-            except Exception:  # 404 for deduped ids is expected
+                ms.append(timed(f"{args.base}/{args.prefix}/{i}"))
+            except (HTTPError, URLError, requests.RequestException):
                 continue
-        ms.sort()
-        if ms:
-            print(f"{label:9s} n={len(ms)} p50={statistics.median(ms):.1f}ms p95={ms[int(len(ms) * .95) - 1]:.1f}ms")
+    ms.sort()
+    if ms:
+        p50 = statistics.quantiles(ms, n=100)[49]
+        p95 = statistics.quantiles(ms, n=100)[94]
+        print(f"n={len(ms)} p50={p50:.2f}ms p95={p95:.2f}ms")
+    else:
+        print("no successful requests")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

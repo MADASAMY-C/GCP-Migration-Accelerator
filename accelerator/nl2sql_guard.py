@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 
 FORBIDDEN = re.compile(
-    r"\b(insert|update|delete|merge|drop|create|alter|truncate|grant|revoke|export|call|execute|load)\b", re.I
+    r"\b(insert|update|delete|merge|drop|create|alter|truncate|grant|revoke|export|call|execute|load)\b", re.IGNORECASE
 )
 
 
@@ -17,7 +17,7 @@ class UnsafeSQL(ValueError):
 
 
 def _strip_comments(sql: str) -> str:
-    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.S)
+    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL)
     return re.sub(r"(--|#)[^\n]*", " ", sql)
 
 
@@ -28,17 +28,16 @@ def validate_sql(sql: str, project: str, allowed_dataset: str = "curated") -> st
         raise UnsafeSQL("empty query")
     if ";" in cleaned:
         raise UnsafeSQL("multiple statements are not allowed")
-    if not re.match(r"^(select|with)\b", cleaned, re.I):
+    if not re.match(r"^(select|with)\b", cleaned, re.IGNORECASE):
         raise UnsafeSQL("only SELECT queries are allowed")
     # keywords are checked outside of string literals
     if FORBIDDEN.search(re.sub(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"", "''", cleaned)):
         raise UnsafeSQL("query contains a forbidden keyword")
     for ident in re.findall(r"`([^`]+)`", cleaned):
         parts = ident.split(".")
-        if len(parts) == 3:
-            if parts[0] != project or parts[1] != allowed_dataset:
-                raise UnsafeSQL(f"table outside {project}.{allowed_dataset}: {ident}")
+        if len(parts) == 3 and (parts[0] != project or parts[1] != allowed_dataset):
+            raise UnsafeSQL(f"table outside {project}.{allowed_dataset}: {ident}")
     # unquoted project.dataset.table references are rejected: the model must backtick-quote them
-    if re.search(r"\b(from|join)\s+[\w\-]+\.[\w\-]+\.[\w\-]+", cleaned, re.I):
+    if re.search(r"\b(from|join)\s+[\w\-]+\.[\w\-]+\.[\w\-]+", cleaned, re.IGNORECASE):
         raise UnsafeSQL("table references must be backtick-quoted")
     return cleaned

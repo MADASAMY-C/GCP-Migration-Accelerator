@@ -73,7 +73,7 @@ def main(argv=None) -> int:
 
     run_id, now, rows, failed = uuid.uuid4().hex[:12], datetime.now(timezone.utc).isoformat(), [], 0
     for rule in rules:
-        res = list(client.query(build_rule_sql(rule, project)).result())[0]
+        res = next(iter(client.query(build_rule_sql(rule, project)).result()))
         s, status = evaluate(rule, int(res.passed_rows), int(res.total_rows))
         failed += status == "FAIL"
         rows.append({"run_id": run_id, "run_ts": now, "rule_name": rule["name"], "table_name": rule["table"],

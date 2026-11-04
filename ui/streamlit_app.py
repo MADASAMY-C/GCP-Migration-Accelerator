@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 
@@ -9,7 +8,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from accelerator.data_upload import DataUploadNormalizer
-
 
 st.set_page_config(page_title="GCP Migration Accelerator - Data Upload", layout="wide")
 
@@ -31,7 +29,7 @@ with tab1:
     with col2:
         order_items_file = st.file_uploader("Order Items (CSV/Excel/JSON)", type=["csv", "xlsx", "xls", "json"])
         payments_file = st.file_uploader("Payments (CSV/Excel/JSON)", type=["csv", "xlsx", "xls", "json"])
-    
+
     def load_file(f):
         if f is None:
             return None
@@ -39,21 +37,21 @@ with tab1:
             name = f.name.lower()
             if name.endswith(".csv"):
                 return pd.read_csv(f)
-            elif name.endswith((".xlsx", ".xls")):
+            if name.endswith((".xlsx", ".xls")):
                 return pd.read_excel(f)
-            elif name.endswith(".json"):
+            if name.endswith(".json"):
                 return pd.read_json(f)
             return pd.read_csv(f)
-        except Exception as e:
-            st.error(f"Error loading {getattr(f,'name','file')}: {e}")
+        except (OSError, pd.errors.ParserError, ValueError) as e:
+            st.error(f"Error loading {getattr(f, 'name', 'file')}: {e}")
             return None
-    
+
     st.session_state["customers"] = load_file(customers_file)
     st.session_state["products"] = load_file(products_file)
     st.session_state["orders"] = load_file(orders_file)
     st.session_state["order_items"] = load_file(order_items_file)
     st.session_state["payments"] = load_file(payments_file)
-    
+
     for k in ["customers", "products", "orders", "order_items", "payments"]:
         df = st.session_state.get(k)
         if df is not None and isinstance(df, pd.DataFrame) and not df.empty:
@@ -70,14 +68,14 @@ with tab2:
         "payments": ["payment_id", "order_id", "payment_type", "payment_value"],
     }
     column_maps = {}
-    for tbl in expected:
+    for tbl, exp_cols in expected.items():
         df = st.session_state.get(tbl)
         if df is None or not isinstance(df, pd.DataFrame) or df.empty:
             continue
         st.subheader(f"{tbl} ({len(df)} rows)")
         cols = list(df.columns)
         col_map = {}
-        for exp in expected[tbl]:
+        for exp in exp_cols:
             sel = st.selectbox(f"Map to {exp}", ["(ignore)"] + cols, key=f"map_{tbl}_{exp}")
             if sel != "(ignore)":
                 col_map[sel] = exp
@@ -110,15 +108,15 @@ with tab3:
                 st.session_state["oltp_norm"] = oltp
                 st.session_state["legacy_norm"] = legacy
                 st.success("Normalized successfully!")
-            except Exception as e:
+            except (ValueError, KeyError, TypeError) as e:
                 st.error(f"Error: {e}")
-    
+
     if st.session_state.get("oltp_norm"):
         st.subheader("OLTP Preview")
         for k, df in st.session_state["oltp_norm"].items():
             with st.expander(f"{k} ({len(df)} rows)"):
                 st.dataframe(df.head(10))
-    
+
     if st.session_state.get("legacy_norm") is not None:
         st.subheader("Legacy (Hive-style) Preview")
         st.dataframe(st.session_state["legacy_norm"].head(20))
@@ -140,9 +138,9 @@ with tab4:
                 st.success(f"Wrote {len(written)} files")
                 for w in written:
                     st.code(w)
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 st.error(f"Error: {e}")
-    
+
     with col2:
         st.subheader("Next steps")
         st.markdown("""
@@ -151,7 +149,7 @@ with tab4:
         docker compose -f source_system/docker-compose.yml up -d
         bash source_system/load_postgres.sh data
         ```
-        
+
         **Upload legacy to GCS:**
         ```bash
         gsutil -m cp -r data/legacy/orders gs://$PROJECT_ID-$PREFIX-legacy/

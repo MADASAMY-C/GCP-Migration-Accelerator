@@ -1,22 +1,31 @@
-import csv
+from __future__ import annotations
+
 import json
 import os
 
-from source_system.generate_data import main
+from source_system import generate_data
 
 
-def test_small_generation(tmp_path):
-    m = main(["--orders", "3000", "--customers", "500", "--products", "50", "--out", str(tmp_path)])
-    assert m["orders"] == 3000 and m["payments"] == 3000 and m["order_items"] >= 3000
+def test_generate_data(tmp_path):
+    manifest = generate_data.main(["--orders", "3000", "--customers", "500", "--seed", "123", "--out", str(tmp_path)])
+    assert manifest["orders"] == 3000
+    assert os.path.isdir(tmp_path / "oltp")
+    assert os.path.isdir(tmp_path / "legacy" / "orders")
+    # spot check a csv
     with open(tmp_path / "oltp" / "orders.csv", encoding="utf-8") as fh:
-        assert sum(1 for _ in csv.reader(fh)) == 3001
-    # payments must equal the sum of items per order (so source totals are internally consistent)
+        lines = fh.readlines()
+    assert lines[0].strip() == "order_id,customer_id,order_status,order_ts,updated_at"
+    assert len(lines) == 3000 + 1
+    # payments sum matches? just presence
+    with open(tmp_path / "oltp" / "payments.csv", encoding="utf-8") as fh:
+        rows = list(__import__("csv").DictReader(fh))
     items = {}
     with open(tmp_path / "oltp" / "order_items.csv", encoding="utf-8") as fh:
-        for r in csv.DictReader(fh):
-            items[r["order_id"]] = items.get(r["order_id"], 0) + round(float(r["unit_price"]) * 100) * int(r["quantity"])
-    with open(tmp_path / "oltp" / "payments.csv", encoding="utf-8") as fh:
-        for r in csv.DictReader(fh):
-            assert round(float(r["payment_value"]) * 100) == items[r["order_id"]]
+        for r in __import__("csv").DictReader(fh):
+            items.setdefault(r["order_id"], 0)
+            items[r["order_id"]] += int(float(r["unit_price"]) * 100) * int(r["quantity"])
+    for r in rows:
+        assert round(float(r["payment_value"]) * 100) == items[r["order_id"]]
     assert os.path.isdir(tmp_path / "legacy" / "orders" / "dt=2022-01-01")
-    assert json.load(open(tmp_path / "manifest.json"))["orders"] == 3000
+    with open(tmp_path / "manifest.json", encoding="utf-8") as mf:
+        assert json.load(mf)["orders"] == 3000

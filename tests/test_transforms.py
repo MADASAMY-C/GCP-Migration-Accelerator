@@ -3,8 +3,14 @@ from datetime import date
 
 import pytest
 
-from accelerator.transforms import (normalize_email, normalize_status, parse_amount, parse_date,
-                                    parse_legacy_order_line, parse_order_event)
+from accelerator.transforms import (
+    normalize_email,
+    normalize_status,
+    parse_amount,
+    parse_date,
+    parse_legacy_order_line,
+    parse_order_event,
+)
 
 
 @pytest.mark.parametrize("raw,expected", [

@@ -15,7 +15,6 @@ Run:
     --service_account_email=gma-pipeline@$PROJECT_ID.iam.gserviceaccount.com --max_num_workers=2
 """
 import argparse
-import json
 from decimal import Decimal
 
 import apache_beam as beam
@@ -47,13 +46,13 @@ class FormatWindow(beam.DoFn):
 
 class SumCount(beam.CombineFn):
     def create_accumulator(self):
-        return 0, Decimal("0")
+        return 0, Decimal(0)
 
     def add_input(self, acc, ev):
         return acc[0] + 1, acc[1] + Decimal(ev["amount"] or "0")
 
     def merge_accumulators(self, accs):
-        return sum(a[0] for a in accs), sum((a[1] for a in accs), Decimal("0"))
+        return sum(a[0] for a in accs), sum((a[1] for a in accs), Decimal(0))
 
     def extract_output(self, acc):
         return acc

@@ -19,7 +19,7 @@ from accelerator import config
 
 
 def split_queries(text: str) -> dict[str, str]:
-    parts = re.split(r"^-- name:\s*(\S+)\s*$", text, flags=re.M)
+    parts = re.split(r"^-- name:\s*(\S+)\s*$", text, flags=re.MULTILINE)
     return {parts[i]: parts[i + 1].strip() for i in range(1, len(parts), 2)}
 
 

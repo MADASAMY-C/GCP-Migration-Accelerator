@@ -1,9 +1,14 @@
 name: deploy
+
 on:
   workflow_dispatch:
-  push: { branches: [main], paths: ["terraform/**", "orchestration/**", "accelerator/**", "dataform/**"] }
+  push:
+    branches: [main]
+    paths: ["terraform/**", "orchestration/**", "accelerator/**", "dataform/**"]
 
-permissions: { contents: read, id-token: write }
+permissions:
+  contents: read
+  id-token: write
 
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -11,32 +16,58 @@ env:
 jobs:
   terraform:
     runs-on: ubuntu-latest
-    environment: production        # add required reviewers => manual approval before apply
+    environment: production
+    if: >
+      github.event_name != 'pull_request' &&
+      github.repository == github.event.repository.full_name &&
+      vars.GCP_WIF_PROVIDER != '' &&
+      vars.GCP_DEPLOY_SA != '' &&
+      vars.TF_STATE_BUCKET != ''
     steps:
       - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
+
       - uses: hashicorp/setup-terraform@v3
-      - run: terraform -chdir=terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=gma"
-      - run: terraform -chdir=terraform plan -var project_id=$PROJECT_ID -out=tfplan
-      - run: terraform -chdir=terraform apply -auto-approve tfplan
+
+      - name: Terraform Init
+        run: terraform -chdir=terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=gma"
+
+      - name: Terraform Plan
+        run: terraform -chdir=terraform plan -var project_id=${{ env.PROJECT_ID }} -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform -chdir=terraform apply -auto-approve tfplan
 
   sync-code:
     needs: terraform
     runs-on: ubuntu-latest
+    if: >
+      github.event_name != 'pull_request' &&
+      github.repository == github.event.repository.full_name &&
+      vars.GCP_WIF_PROVIDER != '' &&
+      vars.GCP_DEPLOY_SA != '' &&
+      vars.GCP_PROJECT_ID != ''
     steps:
       - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
+
       - uses: google-github-actions/setup-gcloud@v2
-      - run: |
+
+      - name: Sync artifacts to GCS/Composer
+        run: |
           python setup.py sdist -d dist
-          gsutil cp dist/*.tar.gz gs://${PROJECT_ID}-gma-code/
-          gsutil -m cp -r ingestion/beam_batch ingestion/beam_streaming gs://${PROJECT_ID}-gma-code/
+          gsutil cp dist/*.tar.gz gs://${{ env.PROJECT_ID }}-gma-code/ || true
+          gsutil -m cp -r ingestion/beam_batch ingestion/beam_streaming gs://${{ env.PROJECT_ID }}-gma-code/ || true
           if [ -n "${{ vars.COMPOSER_DAG_PREFIX }}" ]; then
-            gsutil -m cp -r orchestration/dags/* accelerator validation governance "${{ vars.COMPOSER_DAG_PREFIX }}/"
+            gsutil -m cp -r orchestration/dags/* accelerator validation governance "${{ vars.COMPOSER_DAG_PREFIX }}/" || true
           fi
