@@ -2,6 +2,10 @@
 line-length = 110
 target-version = "py310"
 
+[tool.ruff.lint]
+# EXE001 is noisy on Windows repos (file mode not preserved). Scripts are run via python/CI.
+ignore = ["EXE001"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
