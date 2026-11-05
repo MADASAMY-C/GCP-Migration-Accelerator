@@ -19,10 +19,10 @@ jobs:
     environment: production
     if: >
       github.event_name != 'pull_request' &&
-      github.repository == github.event.repository.full_name &&
       vars.GCP_WIF_PROVIDER != '' &&
       vars.GCP_DEPLOY_SA != '' &&
-      vars.TF_STATE_BUCKET != ''
+      vars.TF_STATE_BUCKET != '' &&
+      vars.GCP_PROJECT_ID != ''
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +38,7 @@ jobs:
         run: terraform -chdir=terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=gma"
 
       - name: Terraform Plan
-        run: terraform -chdir=terraform plan -var project_id=${{ env.PROJECT_ID }} -out=tfplan
+        run: terraform -chdir=terraform plan -var project_id=${{ vars.GCP_PROJECT_ID }} -out=tfplan
 
       - name: Terraform Apply
         run: terraform -chdir=terraform apply -auto-approve tfplan
@@ -46,12 +46,13 @@ jobs:
   sync-code:
     needs: terraform
     runs-on: ubuntu-latest
+    environment: production
     if: >
       github.event_name != 'pull_request' &&
-      github.repository == github.event.repository.full_name &&
       vars.GCP_WIF_PROVIDER != '' &&
       vars.GCP_DEPLOY_SA != '' &&
-      vars.GCP_PROJECT_ID != ''
+      vars.GCP_PROJECT_ID != '' &&
+      vars.TF_STATE_BUCKET != ''
     steps:
       - uses: actions/checkout@v4
 
@@ -66,8 +67,8 @@ jobs:
       - name: Sync artifacts to GCS/Composer
         run: |
           python setup.py sdist -d dist
-          gsutil cp dist/*.tar.gz gs://${{ env.PROJECT_ID }}-gma-code/ || true
-          gsutil -m cp -r ingestion/beam_batch ingestion/beam_streaming gs://${{ env.PROJECT_ID }}-gma-code/ || true
+          gsutil cp dist/*.tar.gz gs://${{ vars.GCP_PROJECT_ID }}-gma-code/ 2>&1 || true
+          gsutil -m cp -r ingestion/beam_batch ingestion/beam_streaming gs://${{ vars.GCP_PROJECT_ID }}-gma-code/ 2>&1 || true
           if [ -n "${{ vars.COMPOSER_DAG_PREFIX }}" ]; then
-            gsutil -m cp -r orchestration/dags/* accelerator validation governance "${{ vars.COMPOSER_DAG_PREFIX }}/" || true
+            gsutil -m cp -r orchestration/dags/* accelerator validation governance "${{ vars.COMPOSER_DAG_PREFIX }}/" 2>&1 || true
           fi

@@ -53,12 +53,6 @@ def main(argv=None) -> dict:
     os.makedirs(oltp, exist_ok=True)
     os.makedirs(legacy_root, exist_ok=True)
 
-    def writer(name, header):
-        fh = open(os.path.join(oltp, name), "w", newline="", encoding="utf-8")
-        w = csv.writer(fh)
-        w.writerow(header)
-        return fh, w
-
     base_of = array("I", [0]) * (a.customers + 1)
     with open(os.path.join(oltp, "customers.csv"), "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
@@ -141,7 +135,7 @@ def main(argv=None) -> dict:
                     if r < 0.01:
                         lamount = ""
                     elif r < 0.30:
-                        lamount = f"₹{lcents // 100:,}.{lcents % 100:02d}"
+                        lamount = f"?{lcents // 100:,}.{lcents % 100:02d}"
                     else:
                         lamount = cents(lcents)
                     row = [order_id, lemail, ldate, lstatus, lamount]
