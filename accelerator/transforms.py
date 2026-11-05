@@ -64,9 +64,12 @@ def normalize_email(value: str | None) -> str | None:
     return s if EMAIL_RE.match(s) else None
 
 
-def parse_legacy_order_line(line: str, ingest_ts: str | None = None) -> dict:
+def parse_legacy_order_line(line: str | list[str] | tuple[str, ...], ingest_ts: str | None = None) -> dict:
     """Parse one line of the legacy Hive-export CSV. Raises ValueError for rows that belong in the DLQ."""
-    row = next(csv.reader([line]), [])
+    if isinstance(line, (list, tuple)):
+        row = list(line)
+    else:
+        row = next(csv.reader([line]), [])
     if len(row) != 5:
         raise ValueError(f"expected 5 columns, got {len(row)}")
     order_id_raw, email, order_date, status, amount = row
@@ -94,7 +97,7 @@ def parse_order_event(payload: bytes | str, ingest_ts: str | None = None) -> dic
     except json.JSONDecodeError as exc:
         raise ValueError(f"invalid json: {exc}") from exc
     if not isinstance(obj, dict):
-        raise ValueError("event must be a JSON object")
+        raise TypeError("event must be a JSON object")
     for field in ("event_id", "order_id", "customer_id", "event_type", "event_ts"):
         if obj.get(field) in (None, ""):
             raise ValueError(f"missing field: {field}")
